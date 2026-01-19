@@ -61,8 +61,8 @@ PDF/HWP → Triage → Parser → YAML Converter → Output
 ## Requirements
 
 - Docker with NVIDIA Container Toolkit
-- NVIDIA GPU (RTX 3060+ recommended)
-- 12GB+ RAM per worker
+- NVIDIA GPU with 8GB+ VRAM (RTX 3060/4070 tested)
+- 8GB+ RAM per worker
 
 ## License
 

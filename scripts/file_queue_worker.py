@@ -232,35 +232,8 @@ def acquire_lock(r: redis.Redis, file_name: str, ttl: int = LOCK_TTL) -> bool:
     return r.set(get_lock_key(file_name), WORKER_ID, nx=True, ex=ttl)
 
 
-# Lua scripts for atomic lock operations
-_EXTEND_LOCK_SCRIPT = """
-local key = KEYS[1]
-local expected_owner = ARGV[1]
-local ttl = tonumber(ARGV[2])
-
-local current_owner = redis.call('GET', key)
-if current_owner == expected_owner then
-    return redis.call('EXPIRE', key, ttl)
-end
-return 0
-"""
-
-_RELEASE_LOCK_SCRIPT = """
-local key = KEYS[1]
-local expected_owner = ARGV[1]
-
-local current_owner = redis.call('GET', key)
-if current_owner == expected_owner then
-    return redis.call('DEL', key)
-end
-return 0
-"""
-
-
 def extend_lock(r: redis.Redis, file_name: str, ttl: int = LOCK_TTL) -> bool:
     """파일 처리 락 TTL 연장 (장시간 작업용).
-
-    Lua 스크립트로 소유권 확인과 TTL 연장을 원자적으로 수행합니다.
 
     Args:
         r: Redis 연결
@@ -272,8 +245,14 @@ def extend_lock(r: redis.Redis, file_name: str, ttl: int = LOCK_TTL) -> bool:
     """
     try:
         lock_key = get_lock_key(file_name)
-        result = r.eval(_EXTEND_LOCK_SCRIPT, 1, lock_key, WORKER_ID, ttl)
-        return result > 0
+        lua_script = """
+        if redis.call('GET', KEYS[1]) == ARGV[1] then
+            return redis.call('EXPIRE', KEYS[1], ARGV[2])
+        else
+            return 0
+        end
+        """
+        return r.eval(lua_script, 1, lock_key, WORKER_ID, ttl) > 0
     except redis.RedisError as e:
         logger.warning(f"Failed to extend lock for {file_name}: {e}")
         return False
@@ -282,15 +261,19 @@ def extend_lock(r: redis.Redis, file_name: str, ttl: int = LOCK_TTL) -> bool:
 def release_lock(r: redis.Redis, file_name: str) -> bool:
     """파일 처리 락 해제.
 
-    Lua 스크립트로 소유권 확인과 삭제를 원자적으로 수행합니다.
-
     Returns:
         락 삭제 성공 여부
     """
     try:
         lock_key = get_lock_key(file_name)
-        result = r.eval(_RELEASE_LOCK_SCRIPT, 1, lock_key, WORKER_ID)
-        return result > 0
+        lua_script = """
+        if redis.call('GET', KEYS[1]) == ARGV[1] then
+            return redis.call('DEL', KEYS[1])
+        else
+            return 0
+        end
+        """
+        return r.eval(lua_script, 1, lock_key, WORKER_ID) > 0
     except redis.RedisError as e:
         logger.warning(f"Failed to release lock for {file_name}: {e}")
         return False

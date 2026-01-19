@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
 from PIL import Image
 
 try:
@@ -611,7 +612,7 @@ def extract_tables_from_hwp(doc) -> List[TableYAML]:
                         cell_text = cell_text.strip()
 
                         # Get bounding box if available
-                        bbox = getattr(cell, "bbox", (0, 0, 0, 0))
+                        getattr(cell, "bbox", (0, 0, 0, 0))
 
                         cell_obj = TableCell(
                             row=row_idx,

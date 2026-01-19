@@ -10,11 +10,12 @@ PDF를 구조화된 YAML로 직접 변환 (Markdown 거치지 않음).
 
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-import re
-import os
+
 # threading removed - using process-level isolation for GPU stability
 
 try:
@@ -47,7 +48,7 @@ except ImportError:
     torch = None
     logger.debug("torch not available for GPU memory management")
 
-from src.pipeline.quality.table_quality import (
+from src.pipeline.quality.table_quality import (  # noqa: E402
     attach_cell_reliability,
     attach_table_quality,
 )
@@ -337,16 +338,15 @@ class DoclingYAMLAdapter:
         """Lazy load Docling converter with proper GPU configuration."""
         if self._converter is None:
             try:
-                from docling.document_converter import DocumentConverter
+                from docling.datamodel.accelerator_options import (
+                    AcceleratorDevice,
+                    AcceleratorOptions,
+                )
+                from docling.datamodel.base_models import InputFormat
                 from docling.datamodel.pipeline_options import (
                     PdfPipelineOptions,
                 )
-                from docling.datamodel.base_models import InputFormat
-                from docling.document_converter import PdfFormatOption
-                from docling.datamodel.accelerator_options import (
-                    AcceleratorOptions,
-                    AcceleratorDevice,
-                )
+                from docling.document_converter import DocumentConverter, PdfFormatOption
 
                 pipeline_options = PdfPipelineOptions()
                 pipeline_options.do_ocr = self.ocr_enabled
@@ -393,7 +393,7 @@ class DoclingYAMLAdapter:
 
         import os
 
-        old_cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+        os.environ.get("CUDA_VISIBLE_DEVICES", "")
 
         try:
             # Document size limits to prevent resource exhaustion (GPU stability)

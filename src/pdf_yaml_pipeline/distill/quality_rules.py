@@ -15,7 +15,6 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-
 # Chain-of-Thought 누수 패턴
 COT_LEAK_PATTERNS = [
     r"\b생각(해보면|하면|해 봅시다)\b",

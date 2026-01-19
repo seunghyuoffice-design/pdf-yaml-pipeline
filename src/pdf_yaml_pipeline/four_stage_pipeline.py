@@ -8,17 +8,18 @@ import hashlib
 import json
 import re
 import time
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 import yaml
 from pydantic import BaseModel, Field
 
 # 스키마 임포트
 try:
-    from ..schemas.training import ContextItem
     from ..schemas.document import DocumentMetadata
+    from ..schemas.training import ContextItem
 except ImportError:
     # 로컬 테스트용 기본 클래스
     class ContextItem(BaseModel):
@@ -387,7 +388,7 @@ class FourStagePipeline:
         critiques = []
 
         for example in examples:
-            start_time = time.time()
+            time.time()
 
             # Dyarchy 비평 모델 호출 (가상)
             critique = self._generate_critique(example)

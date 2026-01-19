@@ -13,7 +13,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
-
 # ============================================================
 # 운영 정책 (LOCKED)
 # ============================================================
@@ -172,9 +171,9 @@ def validate_response_schema(
         누락된 필드 목록
     """
     missing = []
-    for field in config.schema.required_fields:
-        if field not in response:
-            missing.append(field)
+    for field_name in config.schema.required_fields:
+        if field_name not in response:
+            missing.append(field_name)
     return missing
 
 

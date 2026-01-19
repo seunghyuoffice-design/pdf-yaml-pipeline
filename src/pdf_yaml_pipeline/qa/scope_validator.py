@@ -22,7 +22,6 @@ from typing import Dict, List, Optional, Set
 
 from src.pipeline.qa.qa_prompt import QAResult
 
-
 # ============================================================
 # 검증 결과
 # ============================================================

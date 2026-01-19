@@ -12,9 +12,9 @@ Teacher → Student Distillation 데이터 생성.
 from __future__ import annotations
 
 import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from dataclasses import dataclass, asdict
 
 
 @dataclass

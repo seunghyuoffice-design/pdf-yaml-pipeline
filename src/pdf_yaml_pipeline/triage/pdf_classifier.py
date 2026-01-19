@@ -6,9 +6,9 @@ Docling 전체 파싱 대신 첫 N페이지만 샘플링하여 95%+ 시간 절�
 
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
-from dataclasses import dataclass
 
 try:
     from loguru import logger

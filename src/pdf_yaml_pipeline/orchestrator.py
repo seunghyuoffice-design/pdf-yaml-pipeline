@@ -11,14 +11,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from loguru import logger
-
 from src.pipeline.converters.factory import OutputFormat
 from src.pipeline.converters.jsonl_converter import JSONLConverter, MultiFormatConverter
 from src.pipeline.converters.yaml_converter import YAMLConverter
 from src.pipeline.parsers.unified_parser import UnifiedParser
-from src.schemas.document import TrainingExample, DocumentMetadata, DocumentType
+from src.schemas.document import DocumentMetadata, DocumentType, TrainingExample
 
 
 @dataclass

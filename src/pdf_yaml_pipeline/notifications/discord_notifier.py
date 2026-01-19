@@ -6,10 +6,10 @@ Telegram보다 설정이 간단하고 Embed로 시각적 알림 가능.
 
 from __future__ import annotations
 
-import os
 import json
-import urllib.request
+import os
 import urllib.error
+import urllib.request
 from datetime import datetime
 from typing import Optional
 

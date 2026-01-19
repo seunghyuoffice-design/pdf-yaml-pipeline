@@ -38,7 +38,6 @@ from src.pipeline.qa.scope_guard import (
 )
 from src.pipeline.qa.scope_validator import CrossScopeRouter
 
-
 # ============================================================
 # 설정
 # ============================================================

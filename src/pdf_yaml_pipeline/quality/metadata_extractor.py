@@ -6,7 +6,7 @@ YAML 메타데이터 필드에서 채널 정보를 추출한다.
 
 import re
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 
 @dataclass

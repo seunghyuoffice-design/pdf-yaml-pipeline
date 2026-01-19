@@ -7,12 +7,12 @@
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
 from .channel_keywords import ChannelKeywords
-from .content_analyzer import ContentAnalyzer, ContentAnalysisResult
+from .content_analyzer import ContentAnalysisResult, ContentAnalyzer
 from .metadata_extractor import MetadataExtractor, MetadataResult
 
 logger = logging.getLogger(__name__)

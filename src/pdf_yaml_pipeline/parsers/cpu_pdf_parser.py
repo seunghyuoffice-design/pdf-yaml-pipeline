@@ -9,14 +9,14 @@ License: BSD-3-Clause + MIT (no GPL dependencies)
 
 from __future__ import annotations
 
-import os
-import signal
+import gc
 import multiprocessing
+import os
+import re
+import signal
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-import re
-import gc
 
 try:
     from loguru import logger

@@ -14,7 +14,6 @@ from typing import List, Optional
 
 from src.pipeline.rag.query_classifier import QueryType
 
-
 SYSTEM_PROMPT = """너는 보험 약관을 기반으로 답변하는 전문 AI다.
 
 규칙:

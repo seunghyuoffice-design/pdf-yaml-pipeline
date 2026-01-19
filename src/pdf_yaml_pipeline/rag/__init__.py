@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: MIT
 """RAG (Retrieval-Augmented Generation) module for YAML pipeline."""
 
-from src.pipeline.rag.doc_classifier import classify_document_role, DocumentRole
 from src.pipeline.rag.chunk_builder import build_rag_chunks, table_rows_to_sentences
-from src.pipeline.rag.faiss_indexer import FaissIndexer
-from src.pipeline.rag.retriever import RagRetriever
-from src.pipeline.rag.query_classifier import classify_query, QueryType
 from src.pipeline.rag.context_assembler import assemble_context
+from src.pipeline.rag.doc_classifier import DocumentRole, classify_document_role
+from src.pipeline.rag.faiss_indexer import FaissIndexer
 from src.pipeline.rag.prompt_templates import (
     SYSTEM_PROMPT,
     build_prompt,
     format_answer_with_sources,
 )
+from src.pipeline.rag.query_classifier import QueryType, classify_query
+from src.pipeline.rag.retriever import RagRetriever
 
 __all__ = [
     # 문서 분류

@@ -1,8 +1,8 @@
 """Pipeline Notifications Module."""
 
 from .discord_notifier import (
-    notify_error,
     notify_dlq,
+    notify_error,
     notify_milestone,
     notify_worker_crash,
 )

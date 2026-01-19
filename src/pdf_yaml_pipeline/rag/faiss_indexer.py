@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-from pathlib import Path
 import json
 import pickle
+from pathlib import Path
 
 import faiss
 from sentence_transformers import SentenceTransformer

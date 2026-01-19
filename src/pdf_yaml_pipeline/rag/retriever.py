@@ -6,13 +6,12 @@ FAISS 기반 벡터 검색 및 난이도 분류용 rag_peek 생성.
 
 from __future__ import annotations
 
+import pickle
 from pathlib import Path
 from typing import Any, Dict, List
-import pickle
 
 import faiss
 from sentence_transformers import SentenceTransformer
-
 
 # =============================================================================
 # Default Configuration

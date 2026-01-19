@@ -31,8 +31,8 @@ except ImportError:
     print("Required: pyyaml, loguru")
     sys.exit(1)
 
-from src.pipeline.parsers.unified_parser import UnifiedParser, UnifiedParserConfig
 from src.pipeline.parsers.safe_parser import SafeParser
+from src.pipeline.parsers.unified_parser import UnifiedParser, UnifiedParserConfig
 
 
 def setup_logger(log_level: str = "INFO") -> None:

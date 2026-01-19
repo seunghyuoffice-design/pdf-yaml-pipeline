@@ -8,15 +8,15 @@ from typing import Any, Dict, List
 
 from src.pipeline.distill.quality_rules import (
     Finding,
-    validate_schema,
-    validate_meta,
-    validate_cot_leak,
-    validate_length,
-    validate_role_policy,
-    validate_grounding_minimal,
-    validate_tone_risk,
-    validate_cross_document,
     validate_canonical_quote,
+    validate_cot_leak,
+    validate_cross_document,
+    validate_grounding_minimal,
+    validate_length,
+    validate_meta,
+    validate_role_policy,
+    validate_schema,
+    validate_tone_risk,
 )
 
 

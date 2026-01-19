@@ -25,7 +25,7 @@ import shutil
 import time
 import uuid
 from concurrent.futures.process import BrokenProcessPool
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
@@ -49,10 +49,10 @@ _REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 _PROBATION_PASSED_KEY = "probation:passed:v1"  # 버전 포함 (향후 확장성)
 _PROBATION_TTL_DAYS = 7  # 7일 후 만료 (장기 운영 안정성)
 
-from src.pipeline.parsers.config_schema import (
+from src.pipeline.parsers.config_schema import (  # noqa: E402
     _get_probation_timeout,
 )
-from src.pipeline.utils.timeout_calculator import calculate_timeout
+from src.pipeline.utils.timeout_calculator import calculate_timeout  # noqa: E402
 
 
 @dataclass
@@ -76,6 +76,7 @@ def _parse_worker_loop(
     Segfault 등으로 크래시 시 상위 프로세스가 재기동합니다.
     """
     from pathlib import Path
+
     from src.pipeline.parsers.unified_parser import UnifiedParser, UnifiedParserConfig
 
     parser_config = UnifiedParserConfig(

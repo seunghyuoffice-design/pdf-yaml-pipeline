@@ -6,7 +6,7 @@ Dyarchy 채널 분류 시스템의 키워드 확장기.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Set, List
+from typing import Dict, List, Set
 
 
 @dataclass

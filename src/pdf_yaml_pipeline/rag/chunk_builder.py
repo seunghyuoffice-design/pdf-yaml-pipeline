@@ -8,8 +8,7 @@ RAG 청크에 컨텍스트 정보를 추가.
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.pipeline.rag.doc_classifier import classify_document_role, DocumentRole
-
+from src.pipeline.rag.doc_classifier import DocumentRole, classify_document_role
 
 # =============================================================================
 # Clause Detection Patterns

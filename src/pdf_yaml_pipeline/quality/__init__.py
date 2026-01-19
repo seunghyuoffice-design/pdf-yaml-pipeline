@@ -1,16 +1,16 @@
 """Quality module - 품질 검증 및 자동 수정."""
 
-from src.pipeline.quality.autofix import AutoFixer
 from src.pipeline.quality.auto_validator import (
-    validate_jsonl_file,
     calculate_quality_scores,
     print_validation_report,
+    validate_jsonl_file,
 )
+from src.pipeline.quality.autofix import AutoFixer
+from src.pipeline.quality.ocr_remap import remap_ocr_lines_to_table_cells_iou
 from src.pipeline.quality.table_quality import (
     attach_cell_reliability,
     attach_table_quality,
 )
-from src.pipeline.quality.ocr_remap import remap_ocr_lines_to_table_cells_iou
 
 # Re-export for backward compatibility
 QualityValidator = AutoFixer  # Alias

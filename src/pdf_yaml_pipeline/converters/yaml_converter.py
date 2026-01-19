@@ -12,10 +12,10 @@ import hashlib
 import json
 import random
 import warnings
-import yaml
 from pathlib import Path
-from typing import Any, List, Dict, Union
+from typing import Any, Dict, List, Union
 
+import yaml
 from src.pipeline.converters.factory import OutputFormat
 from src.pipeline.parsers.base import ParsedDocument
 
@@ -214,7 +214,6 @@ class YAMLConverter:
     def _classify_document(self, doc: ParsedDocument) -> str:
         """문서 타입 분류."""
         content = doc.markdown.lower()
-        metadata = doc.metadata
 
         # 파일명 기반 분류
         if "약관" in doc.source_path.lower() or "terms" in doc.source_path.lower():
@@ -411,7 +410,6 @@ class YAMLConverter:
         level = heading.get("level", 1)
 
         # 관련 내용 찾기
-        content = doc.markdown
 
         # 헤딩 다음 내용 추출 (단순화된 방식)
         answer = f"'{text}'에 대한 설명입니다.\n\n"

@@ -6,10 +6,10 @@ Docling wrapper 없이 독립적 사용 가능.
 """
 
 from src.pipeline.ocr.paddle_to_yaml import (
-    PaddleToYAML,
-    PaddleOCRResult,
-    OCRTable,
     OCRCell,
+    OCRTable,
+    PaddleOCRResult,
+    PaddleToYAML,
 )
 
 __all__ = [

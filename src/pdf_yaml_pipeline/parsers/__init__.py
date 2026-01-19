@@ -11,8 +11,8 @@ PDF, HWP, HWPX 등 다양한 문서 형식을 YAML로 직접 변환.
 
 from src.pipeline.parsers.base import (
     BaseParser,
-    ParsedDocument,
     DocumentStructure,
+    ParsedDocument,
     TableData,
 )
 from src.pipeline.parsers.factory import ParserFactory  # Deprecated

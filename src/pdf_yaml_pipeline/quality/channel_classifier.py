@@ -344,8 +344,9 @@ class ChannelClassifier:
         Returns:
             ChannelResult: 분류 결과
         """
-        import yaml
         from pathlib import Path
+
+        import yaml
 
         file_path = Path(file_path)
 

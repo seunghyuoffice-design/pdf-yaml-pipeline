@@ -1,0 +1,181 @@
+# PDF-YAML Pipeline - Docker Compose
+# Single GPU configuration (scale workers as needed)
+
+x-worker-base: &worker-base
+  image: pdf-pipeline:latest
+  restart: unless-stopped
+  init: true
+  dns: [8.8.8.8, 1.1.1.1]
+  working_dir: /app
+  command: ["python", "-m", "scripts.file_queue_worker"]
+  volumes:
+    - ${DATA_PATH:-./data}:/data
+    - ${OUTPUT_PATH:-./data/output}:/data/output
+    - ./src:/app/src:ro
+    - ./scripts:/app/scripts:ro
+  oom_score_adj: 500
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
+  healthcheck:
+    test: ["CMD", "python", "-c", "import redis; r=redis.Redis(host='redis'); r.ping()"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 30s
+
+x-env-base: &env-base
+  CUDA_VISIBLE_DEVICES: "0"
+  DOCLING_DEVICE: ${DOCLING_DEVICE:-cuda}
+  PYTHONPATH: /app
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+  INPUT_DIR: /data
+  OUTPUT_DIR: /data/output
+  OUTPUT_FORMAT: yaml
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  SAFE_MODE: "true"
+  TIMEOUT: "600"
+  MAX_RETRIES: "1"
+  OCR_ENABLED: "false"
+  # Memory management
+  MALLOC_TRIM_THRESHOLD_: "131072"
+  PYTHONMALLOC: "malloc"
+  # GPU stability (prevents segfault)
+  CUDA_LAUNCH_BLOCKING: "1"
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True,max_split_size_mb:256"
+  CUDA_DEVICE_ORDER: "PCI_BUS_ID"
+  CUDA_DEVICE_MAX_CONNECTIONS: "1"
+  PYTORCH_NO_CUDA_MEMORY_CACHING: "1"
+  CUDA_MODULE_LOADING: "LAZY"
+  CUDA_CACHE_DISABLE: "1"
+  # Thread limits (match cpuset)
+  OMP_NUM_THREADS: "2"
+  MKL_NUM_THREADS: "2"
+  OPENBLAS_NUM_THREADS: "2"
+  NUMEXPR_MAX_THREADS: "2"
+  MALLOC_ARENA_MAX: "2"
+  # Notifications (optional)
+  TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+
+services:
+  # Redis Queue
+  redis:
+    image: redis:8-alpine
+    container_name: pdf-pipeline-redis
+    restart: unless-stopped
+    init: true
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command:
+      - /bin/sh
+      - -c
+      - |
+        AOF_MANIFEST="/data/appendonlydir/appendonly.aof.manifest"
+        if [ -f "$$AOF_MANIFEST" ]; then
+          if ! redis-check-aof "$$AOF_MANIFEST" >/dev/null 2>&1; then
+            echo y | redis-check-aof --fix "$$AOF_MANIFEST" || true
+          fi
+        fi
+        exec redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Worker 0 (add more workers by copying this block)
+  worker-0:
+    <<: *worker-base
+    container_name: pdf-pipeline-worker-0
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 12G
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      <<: *env-base
+      WORKER_ID: worker-0
+
+  # Worker 1 (optional - for higher throughput)
+  worker-1:
+    <<: *worker-base
+    container_name: pdf-pipeline-worker-1
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker-0:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 12G
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      <<: *env-base
+      WORKER_ID: worker-1
+    profiles:
+      - scale
+
+  # Queue Initialization
+  queue-init:
+    image: pdf-pipeline:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    dns: [8.8.8.8, 1.1.1.1]
+    environment:
+      PYTHONPATH: /app
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      INPUT_DIR: /data
+    volumes:
+      - ${DATA_PATH:-./data}:/data:ro
+      - ./scripts:/app/scripts:ro
+    working_dir: /app
+    command: ["python", "-m", "scripts.queue_init", "--pattern", "**/*.pdf,**/*.hwp,**/*.hwpx"]
+    restart: "no"
+    profiles:
+      - tools
+
+  # Queue Monitor
+  queue-monitor:
+    image: pdf-pipeline:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    dns: [8.8.8.8, 1.1.1.1]
+    environment:
+      PYTHONPATH: /app
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    volumes:
+      - ./scripts:/app/scripts:ro
+    working_dir: /app
+    command: ["python", "-m", "scripts.queue_monitor"]
+    restart: unless-stopped
+    profiles:
+      - tools
+
+volumes:
+  redis-data:

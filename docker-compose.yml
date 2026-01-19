@@ -51,12 +51,12 @@ x-env-base: &env-base
   PYTORCH_NO_CUDA_MEMORY_CACHING: "1"
   CUDA_MODULE_LOADING: "LAZY"
   CUDA_CACHE_DISABLE: "1"
-  # Thread limits (match cpuset)
-  OMP_NUM_THREADS: "2"
-  MKL_NUM_THREADS: "2"
-  OPENBLAS_NUM_THREADS: "2"
-  NUMEXPR_MAX_THREADS: "2"
-  MALLOC_ARENA_MAX: "2"
+  # Thread limits (configurable via .env THREADS_PER_WORKER)
+  OMP_NUM_THREADS: ${THREADS_PER_WORKER:-2}
+  MKL_NUM_THREADS: ${THREADS_PER_WORKER:-2}
+  OPENBLAS_NUM_THREADS: ${THREADS_PER_WORKER:-2}
+  NUMEXPR_MAX_THREADS: ${THREADS_PER_WORKER:-2}
+  MALLOC_ARENA_MAX: ${THREADS_PER_WORKER:-2}
   # Notifications (optional)
   TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
@@ -91,7 +91,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # Worker 0 (add more workers by copying this block)
+  # Worker 0 (기본 워커)
   worker-0:
     <<: *worker-base
     container_name: pdf-pipeline-worker-0
@@ -101,18 +101,18 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 8G
+          cpus: '${THREADS_PER_WORKER:-2}.0'
+          memory: ${WORKER_MEMORY:-8G}
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']
+              device_ids: ['${CUDA_VISIBLE_DEVICES:-0}']
               capabilities: [gpu]
     environment:
       <<: *env-base
       WORKER_ID: worker-0
 
-  # Worker 1 (optional - for higher throughput)
+  # Worker 1 (추가 워커 - docker compose --profile scale up)
   worker-1:
     <<: *worker-base
     container_name: pdf-pipeline-worker-1
@@ -124,12 +124,12 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 8G
+          cpus: '${THREADS_PER_WORKER:-2}.0'
+          memory: ${WORKER_MEMORY:-8G}
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']
+              device_ids: ['${CUDA_VISIBLE_DEVICES:-0}']
               capabilities: [gpu]
     environment:
       <<: *env-base

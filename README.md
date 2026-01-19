@@ -43,6 +43,7 @@ Key environment variables:
 | `OUTPUT_PATH` | `/data/output` | Output directory for YAML files |
 | `CUDA_VISIBLE_DEVICES` | `0` | GPU device ID |
 | `DOCLING_DEVICE` | `cuda` | `cuda` or `cpu` |
+| `MAX_PDF_PAGES` | `100` | Maximum pages to process per PDF |
 
 ## Architecture
 
@@ -57,6 +58,19 @@ PDF/HWP → Triage → Parser → YAML Converter → Output
 - **GPU Workers**: PDF parsing with Docling (CUDA)
 - **Redis**: Job queue and state management
 - **Queue Monitor**: Progress tracking
+
+## Testing
+
+```bash
+# Install test dependencies
+pip install pytest fakeredis
+
+# Run all tests
+pytest tests/
+
+# Run specific test file
+pytest tests/test_lock_operations.py -v
+```
 
 ## Requirements
 

@@ -114,15 +114,19 @@ class YAMLConverter:
         # 문단 기반 예제 생성
         full_text = "\n\n".join(paragraphs)
         if len(full_text) > 500:
+            # input에 문서 원문, output은 Teacher가 채울 요약
+            truncated_text = full_text[:8000]  # 입력 토큰 제한 고려
             examples.append(
                 {
                     "instruction": self._get_system_prompt(doc_type),
-                    "input": "이 문서의 주요 내용을 요약해주세요.",
-                    "output": full_text[:2000],  # 요약은 Teacher가 채울 예정
+                    "input": f"다음 문서의 주요 내용을 요약해주세요:\n\n{truncated_text}",
+                    "output": "",  # Teacher가 요약 생성
                     "source": doc_type,
                     "metadata": {
                         "file": source_path,
                         "type": "document_summary",
+                        "original_length": len(full_text),
+                        "truncated": len(full_text) > 8000,
                     },
                 }
             )

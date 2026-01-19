@@ -176,15 +176,16 @@ class StructuralDeduplicator:
         if not config.enable_structural:
             return examples, 0
 
-        structures = [self.extract_structure(ex) for ex in examples]
         deduplicated = []
+        kept_structures = []  # Parallel list for O(1) lookup
         removed_count = 0
 
-        for i, example in enumerate(examples):
+        for example in examples:
+            current_structure = self.extract_structure(example)
             is_duplicate = False
 
-            for j, kept_example in enumerate(deduplicated):
-                similarity = self.calculate_similarity(structures[i], structures[examples.index(kept_example)])
+            for kept_structure in kept_structures:
+                similarity = self.calculate_similarity(current_structure, kept_structure)
 
                 if similarity >= config.similarity_threshold:
                     removed_count += 1
@@ -193,6 +194,7 @@ class StructuralDeduplicator:
 
             if not is_duplicate:
                 deduplicated.append(example)
+                kept_structures.append(current_structure)
 
         logger.info(f"Structural deduplication: removed {removed_count} duplicates")
         return deduplicated, removed_count

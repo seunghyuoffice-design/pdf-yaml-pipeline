@@ -25,6 +25,7 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 _DISABLE_PYPDFIUM2 = os.getenv("DISABLE_PYPDFIUM2", "false").lower() == "true"
+_MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "100"))
 try:
     if _DISABLE_PYPDFIUM2:
         raise ImportError("pypdfium2 disabled via env")
@@ -413,7 +414,7 @@ class DoclingYAMLAdapter:
             docling_converter = self._get_converter()
             docling_result = docling_converter.convert(
                 str(file_path),
-                max_num_pages=100,  # 페이지 수 제한
+                max_num_pages=_MAX_PDF_PAGES,
                 max_file_size=max_file_size,
             )
 
@@ -429,8 +430,21 @@ class DoclingYAMLAdapter:
                 attach_cell_reliability(t)
                 attach_table_quality(t)
 
-            page_count = getattr(docling_result.document, "pages", None)
-            page_count = len(page_count) if page_count else 1
+            # Get original page count from pypdfium2 (before truncation)
+            original_pages = None
+            if PYPDFIUM2_AVAILABLE:
+                try:
+                    pdf_doc = pdfium.PdfDocument(str(file_path))
+                    original_pages = len(pdf_doc)
+                    pdf_doc.close()
+                except Exception:
+                    pass
+
+            processed_pages = getattr(docling_result.document, "pages", None)
+            processed_pages = len(processed_pages) if processed_pages else 1
+
+            # Determine if document was truncated
+            truncated = original_pages is not None and original_pages > _MAX_PDF_PAGES
 
             # ImageExtractor 사용
             image_extractor = ImageExtractor()
@@ -442,7 +456,10 @@ class DoclingYAMLAdapter:
                     "encrypted": False,
                     "parser": "docling",
                     "text_extractor": "pypdfium2" if PYPDFIUM2_AVAILABLE else "docling",
-                    "page_count": page_count,
+                    "page_count": processed_pages,
+                    "original_pages": original_pages,
+                    "truncated": truncated,
+                    "max_pages_limit": _MAX_PDF_PAGES if truncated else None,
                     "ocr_enabled": self.ocr_enabled,
                     "table_extraction": self.table_extraction,
                 },
@@ -453,11 +470,12 @@ class DoclingYAMLAdapter:
                 },
             }
 
+            truncation_info = f" (truncated from {original_pages})" if truncated else ""
             logger.info(
                 f"Parsed {file_path.name}: "
                 f"{len(paragraphs)} paragraphs, "
                 f"{len(tables)} tables, "
-                f"{page_count} pages"
+                f"{processed_pages} pages{truncation_info}"
             )
 
             return doc

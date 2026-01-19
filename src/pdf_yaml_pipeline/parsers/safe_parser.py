@@ -595,11 +595,11 @@ class SafeParser:
 
             # Log to skip log
             self._log_skip(file_path, target_path, reason, error)
-            if reason.startswith("probation_") and self._redis is not None:
+            if reason == "probation_crash" and self._redis is not None:
                 try:
                     self._redis.sadd("probation:failed", str(file_path.resolve()))
                 except Exception as e:
-                    logger.warning(f"Failed to record probation failure: {e}")
+                    logger.warning(f"Failed to record probation crash: {e}")
 
         except Exception as e:
             logger.error(f"Failed to isolate {file_path}: {e}")

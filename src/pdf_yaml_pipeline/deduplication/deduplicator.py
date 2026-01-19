@@ -178,14 +178,13 @@ class StructuralDeduplicator:
 
         structures = [self.extract_structure(ex) for ex in examples]
         deduplicated = []
-        kept_structures: List[Dict[str, Any]] = []
         removed_count = 0
 
         for i, example in enumerate(examples):
             is_duplicate = False
 
-            for kept_struct in kept_structures:
-                similarity = self.calculate_similarity(structures[i], kept_struct)
+            for j, kept_example in enumerate(deduplicated):
+                similarity = self.calculate_similarity(structures[i], structures[examples.index(kept_example)])
 
                 if similarity >= config.similarity_threshold:
                     removed_count += 1
@@ -194,7 +193,6 @@ class StructuralDeduplicator:
 
             if not is_duplicate:
                 deduplicated.append(example)
-                kept_structures.append(structures[i])
 
         logger.info(f"Structural deduplication: removed {removed_count} duplicates")
         return deduplicated, removed_count

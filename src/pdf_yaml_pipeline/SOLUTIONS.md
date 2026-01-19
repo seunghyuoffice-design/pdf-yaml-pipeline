@@ -18,7 +18,7 @@
 ### 해결책
 
 ```yaml
-# docker-compose.ralph-workers.yml - x-env-base
+# docker-compose.sage-workers.yml - x-env-base
 environment:
   # 핵심 (필수)
   CUDA_DEVICE_MAX_CONNECTIONS: "1"    # GPU당 동시 연결 1개로 직렬화
@@ -258,7 +258,7 @@ pipeline-gpu1-w0:
 
 ## 관련 파일
 
-- [docker-compose.ralph-workers.yml](../docker-compose.ralph-workers.yml) - 파이프라인 설정
+- [docker-compose.sage-workers.yml](../docker-compose.sage-workers.yml) - 파이프라인 설정
 - [scripts/rebuild_done_set.py](../scripts/rebuild_done_set.py) - Redis 복구
 - [src/pipeline/parsers/config_schema.py](../src/pipeline/parsers/config_schema.py) - 타임아웃 설정
 

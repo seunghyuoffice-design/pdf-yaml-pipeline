@@ -117,8 +117,8 @@ class YAMLConverter:
             examples.append(
                 {
                     "instruction": self._get_system_prompt(doc_type),
-                    "input": f"다음 문서를 요약해주세요:\n\n{full_text[:2000]}",
-                    "output": "",  # 요약은 Teacher가 채울 예정
+                    "input": "이 문서의 주요 내용을 요약해주세요.",
+                    "output": full_text[:2000],  # 요약은 Teacher가 채울 예정
                     "source": doc_type,
                     "metadata": {
                         "file": source_path,

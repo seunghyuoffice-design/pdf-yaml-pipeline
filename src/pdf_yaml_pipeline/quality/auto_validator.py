@@ -8,15 +8,15 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 
 def validate_jsonl_file(
-    input_path: Union[str, Path],
-    output_path: Optional[Union[str, Path]] = None,
+    input_path: str | Path,
+    output_path: str | Path | None = None,
     min_score: float = 0.7,
     include_scores: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """JSONL 파일 검증 및 필터링.
 
     Args:
@@ -103,7 +103,7 @@ def validate_jsonl_file(
     return stats
 
 
-def calculate_quality_scores(record: Dict[str, Any]) -> Dict[str, float]:
+def calculate_quality_scores(record: dict[str, Any]) -> dict[str, float]:
     """레코드 품질 점수 계산.
 
     Args:
@@ -138,7 +138,7 @@ def calculate_quality_scores(record: Dict[str, Any]) -> Dict[str, float]:
     return scores
 
 
-def calculate_structure_score(record: Dict[str, Any]) -> float:
+def calculate_structure_score(record: dict) -> float:
     """구조 점수 계산."""
     score = 0.0
     max_score = 0.0
@@ -181,7 +181,7 @@ def calculate_structure_score(record: Dict[str, Any]) -> float:
     return score / max_score if max_score > 0 else 0.0
 
 
-def calculate_completeness_score(record: Dict[str, Any]) -> float:
+def calculate_completeness_score(record: dict) -> float:
     """완성도 점수 계산."""
     scores = []
 
@@ -217,7 +217,7 @@ def calculate_completeness_score(record: Dict[str, Any]) -> float:
     return sum(scores) / len(scores) if scores else 0.0
 
 
-def calculate_text_quality_score(record: Dict[str, Any]) -> float:
+def calculate_text_quality_score(record: dict) -> float:
     """텍스트 품질 점수 계산."""
     texts = extract_texts(record)
     scores = []
@@ -265,7 +265,7 @@ def calculate_text_quality_score(record: Dict[str, Any]) -> float:
     return sum(scores) / len(scores) if scores else 0.0
 
 
-def extract_texts(record: Dict[str, Any]) -> List[str]:
+def extract_texts(record: dict) -> list[str]:
     """레코드에서 텍스트 추출."""
     texts = []
 
@@ -296,7 +296,7 @@ def extract_texts(record: Dict[str, Any]) -> List[str]:
     return [t for t in texts if t]
 
 
-def print_validation_report(stats: Dict[str, Any]) -> None:
+def print_validation_report(stats: dict[str, Any]) -> None:
     """검증 리포트 출력."""
     print("\n" + "=" * 50)
     print("Quality Validation Report")

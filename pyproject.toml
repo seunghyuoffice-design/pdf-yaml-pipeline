@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pdf-yaml-pipeline"
-version = "0.1.0"
+version = "1.0.0"
 description = "GPU-accelerated document processing: PDF/HWP → YAML for LLM training data"
 readme = "README.md"
 license = "MIT"
@@ -77,15 +77,15 @@ Repository = "https://github.com/seunghyuoffice-design/pdf-yaml-pipeline.git"
 Issues = "https://github.com/seunghyuoffice-design/pdf-yaml-pipeline/issues"
 
 [project.scripts]
-pdf-yaml = "pipeline.cli:main"
+pdf-yaml = "pdf_yaml_pipeline.cli:main"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/src/pipeline",
+    "/src/pdf_yaml_pipeline",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pipeline"]
+packages = ["src/pdf_yaml_pipeline"]
 sources = ["src"]
 
 [tool.ruff]

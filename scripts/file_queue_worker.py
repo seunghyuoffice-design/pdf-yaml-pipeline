@@ -932,7 +932,7 @@ def worker_loop(initial_r: redis.Redis):
             break
 
         # 호스트 절대경로 → 상대경로 변환 (경로 호환성)
-        host_prefixes = ["/home/core/dyarchy-data/", "/data/"]
+        host_prefixes = ["/data/"]
         for prefix in host_prefixes:
             if file_name.startswith(prefix):
                 file_name = file_name[len(prefix) :]

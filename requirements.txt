@@ -1,6 +1,4 @@
-# Pipeline Dependencies
-# PDF  → YAML 파이프라인용 의존성
-# 2025-01-13 버전 고정 (SIGSEGV 안정성 개선)
+# PDF-YAML Pipeline Dependencies
 
 # PyTorch CUDA 12.6
 --extra-index-url https://download.pytorch.org/whl/cu126
@@ -12,23 +10,18 @@ pyyaml==6.0.3
 pydantic==2.12.5
 loguru==0.7.3
 
-# PDF Parsing
+# PDF Parsing (Docling)
 docling==2.68.0
 docling-core==2.59.0
-# docling-parse 4.7.3: font-parsing fix - PyPI 미배포, GitHub 직접 설치
 docling-parse @ git+https://github.com/DS4SD/docling-parse.git@v4.7.3
-# pypdfium2==5.3.0 → Dockerfile에서 강제 고정 설치 (docling <5.0.0 제약 우회)
-
-# Core server stability fixes
-# Force CPU-only processing to avoid GPU driver conflicts
-# Add thread pool executor for safer concurrent processing
+# pypdfium2==5.3.0 installed separately in Dockerfile
 
 # Document Parsing
 python-docx==1.2.0
 
 # HWP Parsing (MIT License)
 olefile==0.47
-Pillow==11.3.0  # CVE fix: BCn buffer overflow
+Pillow==11.3.0
 
 # Data Processing
 pandas==2.3.3
@@ -40,6 +33,6 @@ python-magic==0.4.27
 charset-normalizer==3.4.0
 redis==7.1.0
 psutil==7.2.1
-httpx==0.28.1  # Telegram notifications
+httpx==0.28.1
 
-# Note: PaddleOCR는 별도 컨테이너 (dyarchy-ocr, Python 3.10)
+# Note: PaddleOCR requires separate container (Python 3.10)

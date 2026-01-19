@@ -324,7 +324,7 @@ class FourStagePipeline:
                 input_context=context,
                 output=output,
                 thinking=thinking,
-                model_name="dyarchy-local-llm",
+                model_name="local-llm",
                 temperature=self.config.temperature,
                 tokens_used=len(output.split()),
                 generation_time=time.time() - start_time,
@@ -436,7 +436,7 @@ class FourStagePipeline:
             overall_score=overall_score,
             passed=passed,
             reasoning=reasoning,
-            critic_model="dyarchy-critic-model",
+            critic_model="local-critic",
             evaluation_time=0.1,
             created_at=time.strftime("%Y-%m-%d %H:%M:%S"),
         )

@@ -3,14 +3,11 @@
 AOF 손상 등으로 Redis 데이터가 유실된 경우,
 출력 디렉토리의 YAML 파일을 기반으로 file:done 세트를 재구축합니다.
 
-사용법:
-    # Docker 내부
-    docker run --rm --network dyarchy-v3_default \
-        -v /media/core/.../dyarchy-data/main/output:/output:ro \
-        -v $(pwd)/scripts:/app/scripts:ro \
-        python:3.11-slim sh -c "pip install -q redis && python /app/scripts/rebuild_done_set.py"
+Usage:
+    # Via Docker Compose
+    docker compose --profile recovery run --rm rebuild-done
 
-    # 직접 실행 (core에서)
+    # Direct execution
     python scripts/rebuild_done_set.py --output /data/output
 """
 

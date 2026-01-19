@@ -1,39 +1,26 @@
 """Pipeline package for document conversion.
 
+PDF/HWP/HWPX → YAML conversion for LLM training data.
+
 주요 컴포넌트:
 - UnifiedParser: PDF/HWP/HWPX → YAML 직접 변환
-- Pipeline: 문서 변환 오케스트레이션 (선택적)
 """
 
+__version__ = "0.1.0"
+
 __all__ = [
-    # Parsers (recommended)
+    "__version__",
     "UnifiedParser",
-    # Orchestration (optional, requires src.schemas)
-    "Pipeline",
-    "PipelineConfig",
-    "PipelineStats",
-    "create_pipeline",
+    "UnifiedParserConfig",
 ]
 
 
 def __getattr__(name: str):
     """Lazy loading to avoid import errors."""
     if name == "UnifiedParser":
-        from src.pipeline.parsers.unified_parser import UnifiedParser
-
+        from pipeline.parsers.unified_parser import UnifiedParser
         return UnifiedParser
-    elif name in ("Pipeline", "PipelineConfig", "PipelineStats", "create_pipeline"):
-        from src.pipeline.orchestrator import (
-            Pipeline,
-            PipelineConfig,
-            PipelineStats,
-            create_pipeline,
-        )
-
-        return {
-            "Pipeline": Pipeline,
-            "PipelineConfig": PipelineConfig,
-            "PipelineStats": PipelineStats,
-            "create_pipeline": create_pipeline,
-        }[name]
+    elif name == "UnifiedParserConfig":
+        from pipeline.parsers.unified_parser import UnifiedParserConfig
+        return UnifiedParserConfig
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

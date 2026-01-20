@@ -468,10 +468,9 @@ class DoclingYAMLAdapter:
                     original_page_count=page_count,
                 )
 
-                # 청크 PDF 생성
-                chunk_pdf = pikepdf.new()
-                for page_idx in range(start_page, end_page):
-                    chunk_pdf.pages.append(pdf.pages[page_idx])
+                # 청크 PDF 생성 (extend 사용 - append 루프는 segfault 발생)
+                chunk_pdf = pikepdf.Pdf.new()
+                chunk_pdf.pages.extend(pdf.pages[start_page:end_page])
 
                 chunk_path = Path(tempfile.mktemp(suffix=f"_chunk{chunk_idx}.pdf"))
                 chunk_pdf.save(chunk_path)

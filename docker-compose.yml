@@ -40,17 +40,21 @@ x-env-base: &env-base
   TIMEOUT: "600"
   MAX_RETRIES: "1"
   OCR_ENABLED: "false"
-  # Memory management
-  MALLOC_TRIM_THRESHOLD_: "131072"
-  PYTHONMALLOC: "malloc"
-  # GPU stability (prevents segfault)
-  CUDA_LAUNCH_BLOCKING: "1"
-  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True,max_split_size_mb:256"
-  CUDA_DEVICE_ORDER: "PCI_BUS_ID"
-  CUDA_DEVICE_MAX_CONNECTIONS: "1"
-  PYTORCH_NO_CUDA_MEMORY_CACHING: "1"
-  CUDA_MODULE_LOADING: "LAZY"
-  CUDA_CACHE_DISABLE: "1"
+   # Memory management
+   MALLOC_TRIM_THRESHOLD_: "131072"
+   PYTHONMALLOC: "malloc"
+   # GPU stability (prevents segfault)
+   CUDA_LAUNCH_BLOCKING: "1"
+   PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True,max_split_size_mb:256"
+   CUDA_DEVICE_ORDER: "PCI_BUS_ID"
+   CUDA_DEVICE_MAX_CONNECTIONS: "1"
+   PYTORCH_NO_CUDA_MEMORY_CACHING: "1"
+   CUDA_MODULE_LOADING: "LAZY"
+   CUDA_CACHE_DISABLE: "1"
+   # PDF parsing improvements
+   PDF_PARSER_FALLBACK_ENABLED: "true"
+   PDF_VALIDATION_ENABLED: "true"
+   MAX_PARSER_RETRIES: "3"
   # Thread limits (configurable via .env THREADS_PER_WORKER)
   OMP_NUM_THREADS: ${THREADS_PER_WORKER:-2}
   MKL_NUM_THREADS: ${THREADS_PER_WORKER:-2}
@@ -103,11 +107,17 @@ services:
         limits:
           cpus: '${THREADS_PER_WORKER:-2}.0'
           memory: ${WORKER_MEMORY:-8G}
+          pids: 1024  # Limit process count to prevent fork bombs
         reservations:
           devices:
             - driver: nvidia
               device_ids: ['${CUDA_VISIBLE_DEVICES:-0}']
               capabilities: [gpu]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
     environment:
       <<: *env-base
       WORKER_ID: worker-0
@@ -126,11 +136,17 @@ services:
         limits:
           cpus: '${THREADS_PER_WORKER:-2}.0'
           memory: ${WORKER_MEMORY:-8G}
+          pids: 1024  # Limit process count to prevent fork bombs
         reservations:
           devices:
             - driver: nvidia
               device_ids: ['${CUDA_VISIBLE_DEVICES:-0}']
               capabilities: [gpu]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
     environment:
       <<: *env-base
       WORKER_ID: worker-1

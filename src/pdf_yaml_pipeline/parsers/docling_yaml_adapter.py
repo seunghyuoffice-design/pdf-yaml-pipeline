@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -85,6 +87,56 @@ class OCRLine:
     text: str
     confidence: float
     bbox: Tuple[float, float, float, float]  # (l, t, r, b)
+
+
+# qpdf CLI 사용 가능 여부 확인
+QPDF_AVAILABLE = shutil.which("qpdf") is not None
+
+
+def _create_chunk_qpdf(
+    source_path: Path,
+    output_path: Path,
+    start_page: int,
+    end_page: int,
+) -> bool:
+    """qpdf CLI로 청크 생성 (pikepdf segfault 회피).
+
+    Args:
+        source_path: 원본 PDF 경로
+        output_path: 출력 청크 경로
+        start_page: 시작 페이지 (0-indexed)
+        end_page: 끝 페이지 (exclusive, 0-indexed)
+
+    Returns:
+        성공 여부
+    """
+    # qpdf는 1-indexed 페이지 번호 사용
+    page_range = f"{start_page + 1}-{end_page}"
+
+    cmd = [
+        "qpdf",
+        str(source_path),
+        "--pages", str(source_path), page_range, "--",
+        str(output_path),
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            logger.error(f"qpdf failed: {result.stderr}")
+            return False
+        return True
+    except subprocess.TimeoutExpired:
+        logger.error("qpdf timeout")
+        return False
+    except Exception as e:
+        logger.error(f"qpdf error: {e}")
+        return False
 
 
 class ParagraphExtractor:
@@ -710,14 +762,20 @@ class DoclingYAMLAdapter:
                             original_page_count=page_count,
                         )
 
-                        # 청크 PDF 생성
+                        # 청크 PDF 생성 (qpdf CLI 사용 - pikepdf segfault 회피)
                         chunk_path = Path(tempfile.mktemp(suffix=f"_chunk{chunk_idx}.pdf"))
                         try:
-                            with pikepdf.open(normalized_path) as pdf:
-                                chunk_pdf = pikepdf.Pdf.new()
-                                chunk_pdf.pages.extend(pdf.pages[start_page:end_page])
-                                chunk_pdf.save(chunk_path)
-                                chunk_pdf.close()
+                            if QPDF_AVAILABLE:
+                                # qpdf CLI로 청크 생성 (메모리 안전)
+                                if not _create_chunk_qpdf(normalized_path, chunk_path, start_page, end_page):
+                                    raise RuntimeError(f"qpdf failed to create chunk {chunk_idx}")
+                            else:
+                                # 폴백: pikepdf (qpdf CLI 미설치 시)
+                                with pikepdf.open(normalized_path) as pdf:
+                                    chunk_pdf = pikepdf.Pdf.new()
+                                    chunk_pdf.pages.extend(pdf.pages[start_page:end_page])
+                                    chunk_pdf.save(chunk_path)
+                                    chunk_pdf.close()
                             logger.debug(f"Created chunk {chunk_idx + 1}/{total_chunks}: pages {start_page}-{end_page - 1}")
 
                             # 즉시 파싱

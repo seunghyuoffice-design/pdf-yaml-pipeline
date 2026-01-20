@@ -429,13 +429,13 @@ class SafeParser:
             SafeParseResult with success/failure info
         """
         file_path = Path(file_path)
-        file_key = str(file_path.resolve())
+        file_key = str(file_path.resolve())  # PROBATION 캐시용 (원본 유지)
 
         # PDF 정규화 단계 (pikepdf 기반, 파싱 전 손상 복구)
         normalized_path = self._normalize_pdf_if_needed(file_path)
         if normalized_path is not None:
-            file_path = normalized_path
-            file_key = str(file_path.resolve())
+            file_path = normalized_path  # 파싱은 정규화된 파일로
+            # file_key는 원본 유지 (PROBATION 캐시 일관성)
 
         # PROBATION 여부 결정 (Redis + 메모리 캐시 확인)
         is_probation = self.probation_enabled and not self._is_probation_passed(file_key)

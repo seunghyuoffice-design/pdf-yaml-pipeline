@@ -17,7 +17,7 @@ import logging
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class NormalizationResult:
 
     success: bool
     output_path: Optional[Path]
-    repairs_applied: list[str]
+    repairs_applied: List[str]
     error: Optional[str] = None
 
     @property
@@ -224,10 +224,10 @@ class PDFNormalizer:
 
         try:
             # Try qpdf command directly with more aggressive options
+            # Note: --replace-input cannot be used with output file
             result = subprocess.run(
                 [
                     "qpdf",
-                    "--replace-input",
                     "--linearize",
                     "--object-streams=generate",
                     "--remove-unreferenced-resources=yes",

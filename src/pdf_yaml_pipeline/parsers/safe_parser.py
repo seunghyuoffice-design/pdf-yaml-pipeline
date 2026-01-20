@@ -74,6 +74,8 @@ def _parse_worker_loop(
 
     단일 프로세스가 UnifiedParser를 로드한 뒤 순차적으로 요청을 처리합니다.
     Segfault 등으로 크래시 시 상위 프로세스가 재기동합니다.
+
+    Multi-parser fallback: docling 실패 시 pypdf, pdfplumber, PyMuPDF 순차 시도
     """
     from pathlib import Path
 
@@ -87,6 +89,15 @@ def _parse_worker_loop(
     )
     parser = UnifiedParser(config=parser_config)
 
+    # Initialize multi-parser fallback system
+    try:
+        from .multi_parser import MultiParserSystem
+        multi_parser = MultiParserSystem()
+        logger.debug("Multi-parser fallback system initialized")
+    except ImportError as e:
+        logger.warning(f"Multi-parser system not available: {e}")
+        multi_parser = None
+
     while True:
         payload = req_q.get()
         if payload is None:
@@ -94,20 +105,78 @@ def _parse_worker_loop(
 
         job_id = payload.get("job_id")
         file_path_str = payload.get("file_path")
+        file_path = Path(file_path_str)
 
         try:
-            result = parser.parse(Path(file_path_str))
+            # Try primary parser (docling via UnifiedParser)
+            result = parser.parse(file_path)
             if not isinstance(result, dict):
                 result = asdict(result) if hasattr(result, "__dataclass_fields__") else dict(result)
-            res_q.put({"job_id": job_id, "success": True, "data": result})
-        except Exception as e:  # noqa: BLE001
-            res_q.put(
-                {
+
+            # Validate result has actual content
+            content = result.get('content', {})
+            paragraphs = content.get('paragraphs', [])
+            tables = result.get('tables', [])
+
+            has_content = (
+                (isinstance(paragraphs, list) and len(paragraphs) > 0) or
+                (isinstance(tables, list) and len(tables) > 0)
+            )
+
+            if has_content:
+                res_q.put({"job_id": job_id, "success": True, "data": result})
+            else:
+                # Primary parser succeeded but no content extracted
+                raise ValueError("Primary parser extracted no content")
+
+        except Exception as primary_error:
+            logger.warning(f"Primary parser failed for {file_path_str}: {str(primary_error)}")
+
+            # Try multi-parser fallback if available
+            if multi_parser is not None:
+                try:
+                    logger.info(f"Attempting multi-parser fallback for {file_path_str}")
+                    fallback_result, successful_parser, error_history = multi_parser.parse_pdf(str(file_path))
+
+                    if fallback_result is not None:
+                        logger.info(f"Multi-parser fallback succeeded with {successful_parser}")
+                        res_q.put({
+                            "job_id": job_id,
+                            "success": True,
+                            "data": fallback_result,
+                            "fallback_used": True,
+                            "fallback_parser": successful_parser,
+                            "primary_error": str(primary_error)
+                        })
+                        continue
+
+                    # All parsers failed - include error history
+                    combined_error = f"Primary: {str(primary_error)}; Fallback attempts: {'; '.join(error_history)}"
+                    res_q.put({
+                        "job_id": job_id,
+                        "success": False,
+                        "error": combined_error,
+                        "fallback_attempted": True,
+                        "error_history": error_history
+                    })
+
+                except Exception as fallback_error:
+                    logger.error(f"Multi-parser fallback also failed: {str(fallback_error)}")
+                    combined_error = f"Primary: {str(primary_error)}; Fallback: {str(fallback_error)}"
+                    res_q.put({
+                        "job_id": job_id,
+                        "success": False,
+                        "error": combined_error,
+                        "fallback_attempted": True
+                    })
+            else:
+                # No fallback available
+                res_q.put({
                     "job_id": job_id,
                     "success": False,
-                    "error": str(e),
-                }
-            )
+                    "error": str(primary_error),
+                    "fallback_available": False
+                })
 
 
 class SafeParser:
@@ -268,7 +337,7 @@ class SafeParser:
         logger.debug("Started SafeParser worker process (spawn)")
 
     def _kill_worker(self) -> None:
-        """워커를 강제 종료하고 자원 해제 (좀비 방지)."""
+        """워커 프로세스를 강제 종료하고 자원 해제 (좀비 방지)."""
         if self._worker is not None:
             try:
                 if self._worker.is_alive():
@@ -297,6 +366,7 @@ class SafeParser:
                     self._worker.close()
                 except Exception:
                     pass
+
         self._worker = None
         for q in (self._req_q, self._res_q):
             if q is not None:
@@ -361,6 +431,12 @@ class SafeParser:
         file_path = Path(file_path)
         file_key = str(file_path.resolve())
 
+        # PDF 정규화 단계 (pikepdf 기반, 파싱 전 손상 복구)
+        normalized_path = self._normalize_pdf_if_needed(file_path)
+        if normalized_path is not None:
+            file_path = normalized_path
+            file_key = str(file_path.resolve())
+
         # PROBATION 여부 결정 (Redis + 메모리 캐시 확인)
         is_probation = self.probation_enabled and not self._is_probation_passed(file_key)
 
@@ -424,9 +500,25 @@ class SafeParser:
                         if is_probation:
                             self._mark_probation_passed(file_key)
                             logger.info(f"PROBATION success: {file_path.name} → NORMAL")
+
+                        # Log fallback usage if applicable
+                        if res.get("fallback_used"):
+                            fallback_parser = res.get("fallback_parser", "unknown")
+                            logger.info(f"Fallback parser succeeded: {file_path.name} → {fallback_parser}")
+
                         return SafeParseResult(success=True, data=res.get("data"))
 
                     error_msg = res.get("error", "Unknown error")
+
+                    # Enhanced error logging for fallback attempts
+                    if res.get("fallback_attempted"):
+                        if res.get("error_history"):
+                            logger.warning(f"All parsers failed for {file_path.name}: {res['error_history']}")
+                        else:
+                            logger.warning(f"Fallback attempted but failed for {file_path.name}: {error_msg}")
+                    else:
+                        logger.warning(f"Primary parser failed for {file_path.name}: {error_msg}")
+
                     self._consecutive_failures += 1
                     # PROBATION 실패 시 즉시 격리
                     if is_probation:
@@ -550,6 +642,57 @@ class SafeParser:
             self._kill_worker()
         except Exception:
             pass
+
+    def _normalize_pdf_if_needed(self, file_path: Path) -> Optional[Path]:
+        """PDF 파일인 경우 pikepdf로 정규화 시도.
+
+        손상된 PDF 구조를 복구하고 선형화하여 파싱 성공률을 높입니다.
+        정규화는 선택적 개선이므로 실패해도 원본으로 계속 진행합니다.
+
+        Args:
+            file_path: 원본 파일 경로
+
+        Returns:
+            정규화된 파일 경로 (성공 시) 또는 None (PDF 아님/실패 시)
+        """
+        # PDF 파일만 정규화
+        if file_path.suffix.lower() != ".pdf":
+            return None
+
+        try:
+            from .pdf_normalizer import PDFNormalizer, NormalizationResult
+
+            normalizer = PDFNormalizer(
+                linearize=True,
+                decompress_streams=True,
+                remove_unreferenced=True,
+                fix_metadata=True,
+                temp_dir=self.skip_dir / "normalized",
+            )
+
+            result: NormalizationResult = normalizer.normalize(file_path)
+
+            if result.success and result.output_path:
+                if result.was_modified:
+                    logger.info(
+                        f"PDF normalized: {file_path.name} "
+                        f"(repairs: {', '.join(result.repairs_applied)})"
+                    )
+                return result.output_path
+            else:
+                if result.error:
+                    logger.debug(f"PDF normalization skipped: {file_path.name} ({result.error})")
+                return None
+
+        except ImportError:
+            # pikepdf not available, skip normalization
+            logger.debug("pikepdf not available, skipping PDF normalization")
+            return None
+
+        except Exception as e:
+            # Normalization failed, continue with original file
+            logger.warning(f"PDF normalization failed for {file_path.name}: {e}")
+            return None
 
     def _isolate_file(
         self,

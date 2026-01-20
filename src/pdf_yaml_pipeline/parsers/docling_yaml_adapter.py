@@ -12,9 +12,22 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+# PDF normalization and chunking (MIT license)
+try:
+    import pikepdf
+    PIKEPDF_AVAILABLE = True
+except ImportError:
+    PIKEPDF_AVAILABLE = False
+    pikepdf = None
+
+# Chunking constants
+CHUNK_SIZE = 100  # 100페이지 단위로 분할
+PAGE_THRESHOLD = 100  # 100페이지 초과 시 분할
 
 # threading removed - using process-level isolation for GPU stability
 
@@ -52,6 +65,17 @@ from src.pipeline.quality.table_quality import (  # noqa: E402
     attach_cell_reliability,
     attach_table_quality,
 )
+
+
+@dataclass(frozen=True)
+class ChunkInfo:
+    """청크 분할 메타데이터 (무결성 검증용)."""
+
+    chunk_index: int           # 0, 1, 2, ...
+    start_page: int            # 원본 기준 시작 페이지 (0-indexed)
+    end_page: int              # 원본 기준 끝 페이지 (exclusive)
+    total_chunks: int          # 전체 청크 수
+    original_page_count: int   # 원본 총 페이지 수
 
 
 @dataclass(frozen=True)
@@ -377,6 +401,241 @@ class DoclingYAMLAdapter:
 
         return self._converter
 
+    def _normalize_pdf(self, file_path: Path) -> Tuple[Path, int, bool]:
+        """pikepdf로 PDF 정규화 및 페이지 수 확인.
+
+        Args:
+            file_path: 원본 PDF 경로
+
+        Returns:
+            (정규화된 PDF 경로, 페이지 수, 임시 파일 여부)
+        """
+        if not PIKEPDF_AVAILABLE:
+            logger.warning("pikepdf not available, skipping normalization")
+            # pypdfium2로 페이지 수만 확인
+            if PYPDFIUM2_AVAILABLE:
+                try:
+                    pdf = pdfium.PdfDocument(str(file_path))
+                    page_count = len(pdf)
+                    pdf.close()
+                    return file_path, page_count, False
+                except Exception as e:
+                    logger.warning(f"Failed to get page count: {e}")
+                    return file_path, 0, False
+            return file_path, 0, False
+
+        try:
+            with pikepdf.open(file_path) as pdf:
+                page_count = len(pdf.pages)
+
+                # 정규화 필요 여부 판단 (항상 정규화하여 호환성 보장)
+                normalized_path = Path(tempfile.mktemp(suffix=".pdf"))
+                pdf.save(normalized_path, linearize=True)
+                logger.debug(f"Normalized PDF: {file_path.name} -> {normalized_path.name} ({page_count} pages)")
+
+                return normalized_path, page_count, True
+
+        except Exception as e:
+            logger.error(f"pikepdf normalization failed: {e}")
+            raise ValueError(f"PDF normalization failed: {e}")
+
+    def _split_pdf(self, normalized_path: Path, page_count: int) -> List[Tuple[ChunkInfo, Path]]:
+        """대용량 PDF를 청크로 분할.
+
+        Args:
+            normalized_path: 정규화된 PDF 경로
+            page_count: 총 페이지 수
+
+        Returns:
+            [(ChunkInfo, 청크 PDF 경로), ...]
+        """
+        if not PIKEPDF_AVAILABLE:
+            raise RuntimeError("pikepdf required for PDF splitting")
+
+        chunks: List[Tuple[ChunkInfo, Path]] = []
+        total_chunks = (page_count + CHUNK_SIZE - 1) // CHUNK_SIZE  # ceiling division
+
+        with pikepdf.open(normalized_path) as pdf:
+            for chunk_idx in range(total_chunks):
+                start_page = chunk_idx * CHUNK_SIZE
+                end_page = min(start_page + CHUNK_SIZE, page_count)
+
+                chunk_info = ChunkInfo(
+                    chunk_index=chunk_idx,
+                    start_page=start_page,
+                    end_page=end_page,
+                    total_chunks=total_chunks,
+                    original_page_count=page_count,
+                )
+
+                # 청크 PDF 생성
+                chunk_pdf = pikepdf.new()
+                for page_idx in range(start_page, end_page):
+                    chunk_pdf.pages.append(pdf.pages[page_idx])
+
+                chunk_path = Path(tempfile.mktemp(suffix=f"_chunk{chunk_idx}.pdf"))
+                chunk_pdf.save(chunk_path)
+                chunk_pdf.close()
+
+                chunks.append((chunk_info, chunk_path))
+                logger.debug(f"Created chunk {chunk_idx + 1}/{total_chunks}: pages {start_page}-{end_page - 1}")
+
+        return chunks
+
+    def _parse_single_chunk(self, chunk_path: Path, chunk_info: ChunkInfo) -> Dict[str, Any]:
+        """단일 청크를 docling으로 파싱.
+
+        Args:
+            chunk_path: 청크 PDF 경로
+            chunk_info: 청크 메타데이터
+
+        Returns:
+            파싱 결과 dict
+        """
+        logger.info(f"Parsing chunk {chunk_info.chunk_index + 1}/{chunk_info.total_chunks} "
+                   f"(pages {chunk_info.start_page}-{chunk_info.end_page - 1})")
+
+        # GPU 메모리 정리
+        if TORCH_AVAILABLE and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        docling_converter = self._get_converter()
+        docling_result = docling_converter.convert(str(chunk_path))
+
+        # 텍스트 추출
+        paragraphs = self._extract_paragraphs(chunk_path, docling_result)
+
+        # 테이블 추출
+        table_extractor = TableExtractor()
+        tables = table_extractor.extract(docling_result, self.table_extraction)
+
+        # 품질 평가
+        for t in tables:
+            attach_cell_reliability(t)
+            attach_table_quality(t)
+
+        # 이미지 추출
+        image_extractor = ImageExtractor()
+        images = image_extractor.extract(docling_result)
+
+        chunk_page_count = chunk_info.end_page - chunk_info.start_page
+
+        return {
+            "chunk_info": {
+                "chunk_index": chunk_info.chunk_index,
+                "start_page": chunk_info.start_page,
+                "end_page": chunk_info.end_page,
+                "total_chunks": chunk_info.total_chunks,
+                "original_page_count": chunk_info.original_page_count,
+            },
+            "page_count": chunk_page_count,
+            "paragraphs": paragraphs,
+            "tables": tables,
+            "images": images,
+        }
+
+    def _merge_chunk_results(
+        self, file_path: Path, chunks_results: List[Tuple[ChunkInfo, Dict[str, Any]]]
+    ) -> Dict[str, Any]:
+        """청크 결과를 병합하고 무결성 검증.
+
+        Args:
+            file_path: 원본 PDF 경로
+            chunks_results: [(ChunkInfo, 파싱 결과), ...]
+
+        Returns:
+            병합된 최종 결과
+
+        Raises:
+            ValueError: 무결성 검증 실패 시
+        """
+        if not chunks_results:
+            raise ValueError("No chunk results to merge")
+
+        # 정렬 (chunk_index 기준)
+        chunks_results = sorted(chunks_results, key=lambda x: x[0].chunk_index)
+
+        first_chunk_info = chunks_results[0][0]
+        total_chunks = first_chunk_info.total_chunks
+        original_page_count = first_chunk_info.original_page_count
+
+        # === 무결성 검증 1: 모든 청크 존재 확인 ===
+        chunk_indices = {c.chunk_index for c, _ in chunks_results}
+        expected_indices = set(range(total_chunks))
+        if chunk_indices != expected_indices:
+            missing = expected_indices - chunk_indices
+            raise ValueError(f"청크 누락: {missing}")
+
+        # === 무결성 검증 2: 페이지 연속성 확인 ===
+        for i in range(1, len(chunks_results)):
+            prev_end = chunks_results[i - 1][0].end_page
+            curr_start = chunks_results[i][0].start_page
+            if prev_end != curr_start:
+                raise ValueError(f"페이지 갭 발생: chunk {i - 1} end={prev_end}, chunk {i} start={curr_start}")
+
+        # === 무결성 검증 3: 총 페이지 수 일치 ===
+        total_pages = sum(c.end_page - c.start_page for c, _ in chunks_results)
+        if total_pages != original_page_count:
+            raise ValueError(f"페이지 수 불일치: merged={total_pages}, original={original_page_count}")
+
+        # === 병합 ===
+        merged_paragraphs: List[str] = []
+        merged_tables: List[Dict[str, Any]] = []
+        merged_images: List[Dict[str, Any]] = []
+        table_id_counter = 0
+        image_id_counter = 0
+
+        for chunk_info, result in chunks_results:
+            page_offset = chunk_info.start_page
+
+            # Paragraphs 연결
+            merged_paragraphs.extend(result["paragraphs"])
+
+            # Tables 연결 (페이지 번호 보정, ID 재부여)
+            for table in result["tables"]:
+                table_id_counter += 1
+                table["table_id"] = f"table_{table_id_counter}"
+                original_page = table.get("page", 1)
+                table["page"] = original_page + page_offset  # 원본 기준 절대 페이지
+                table["original_page"] = original_page + page_offset
+                table["chunk_index"] = chunk_info.chunk_index
+                merged_tables.append(table)
+
+            # Images 연결 (페이지 번호 보정, ID 재부여)
+            for image in result["images"]:
+                image_id_counter += 1
+                image["image_id"] = f"img_{image_id_counter}"
+                original_page = image.get("page", 1)
+                image["page"] = original_page + page_offset
+                image["chunk_index"] = chunk_info.chunk_index
+                merged_images.append(image)
+
+        logger.info(
+            f"Merged {len(chunks_results)} chunks: "
+            f"{len(merged_paragraphs)} paragraphs, "
+            f"{len(merged_tables)} tables, "
+            f"{len(merged_images)} images"
+        )
+
+        return {
+            "document": {
+                "source_path": str(file_path),
+                "format": "pdf",
+                "encrypted": False,
+                "parser": "docling",
+                "text_extractor": "pypdfium2" if PYPDFIUM2_AVAILABLE else "docling",
+                "page_count": original_page_count,
+                "ocr_enabled": self.ocr_enabled,
+                "table_extraction": self.table_extraction,
+                "chunked": True,
+                "chunk_count": total_chunks,
+                "chunk_size": CHUNK_SIZE,
+            },
+            "content": {"paragraphs": merged_paragraphs},
+            "tables": merged_tables,
+            "assets": {"images": merged_images},
+        }
+
     def parse(self, file_path: Path) -> Dict[str, Any]:
         """Parse PDF to YAML-serializable dict.
 
@@ -396,77 +655,158 @@ class DoclingYAMLAdapter:
         os.environ.get("CUDA_VISIBLE_DEVICES", "")
 
         try:
+            # Pre-validation for common PDF issues
+            from .pdf_validator import validate_pdf_integrity, is_pdf_corrupted
+
+            is_valid, validation_error = validate_pdf_integrity(str(file_path))
+            if not is_valid:
+                logger.error(f"PDF validation failed for {file_path.name}: {validation_error}")
+                raise ValueError(f"PDF validation failed: {validation_error}")
+
+            is_corrupted, corruption_reason = is_pdf_corrupted(str(file_path))
+            if is_corrupted:
+                logger.error(f"PDF corruption detected in {file_path.name}: {corruption_reason}")
+                raise ValueError(f"PDF corruption detected: {corruption_reason}")
+
             # Document size limits to prevent resource exhaustion (GPU stability)
             file_size = file_path.stat().st_size
             max_file_size = 50 * 1024 * 1024  # 50MB 제한
 
-            if file_size > max_file_size:
+            # 파일 크기 제한 완화 (청크 분할로 대용량 처리 가능)
+            # 단, 극단적으로 큰 파일은 여전히 제한 (200MB)
+            extreme_max_size = 200 * 1024 * 1024
+            if file_size > extreme_max_size:
                 logger.warning(
-                    f"File too large for stable GPU processing: {file_path.name} ({file_size / 1024 / 1024:.1f}MB > 50MB)"
+                    f"File extremely large: {file_path.name} ({file_size / 1024 / 1024:.1f}MB > 200MB)"
                 )
-                raise ValueError(f"File too large: {file_size / 1024 / 1024:.1f}MB. Max allowed: 50MB")
+                raise ValueError(f"File too large: {file_size / 1024 / 1024:.1f}MB. Max allowed: 200MB")
 
-            # GPU 메모리 정리 (기존 컨텍스트 해제)
-            if TORCH_AVAILABLE and torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            # === Step 1: pikepdf로 정규화 + 페이지 수 확인 ===
+            normalized_path, page_count, is_temp = self._normalize_pdf(file_path)
+            logger.info(f"Normalized PDF: {file_path.name} ({page_count} pages)")
 
-            docling_converter = self._get_converter()
-            docling_result = docling_converter.convert(
-                str(file_path),
-                max_num_pages=100,  # 페이지 수 제한
-                max_file_size=max_file_size,
-            )
+            temp_files: List[Path] = []
+            if is_temp:
+                temp_files.append(normalized_path)
 
-            # 하이브리드: pypdfium2(텍스트) + Docling(구조)
-            paragraphs = self._extract_paragraphs(file_path, docling_result)
+            try:
+                # === Step 2: 페이지 수에 따라 분기 ===
+                if page_count > PAGE_THRESHOLD:
+                    # 대용량 PDF: 청크 분할 처리
+                    logger.info(f"Large PDF detected ({page_count} pages > {PAGE_THRESHOLD}), splitting into chunks")
 
-            # TableExtractor 사용
-            table_extractor = TableExtractor()
-            tables = table_extractor.extract(docling_result, self.table_extraction)
+                    chunks = self._split_pdf(normalized_path, page_count)
+                    temp_files.extend([path for _, path in chunks])
 
-            # Apply quality assessment
-            for t in tables:
-                attach_cell_reliability(t)
-                attach_table_quality(t)
+                    # 각 청크 파싱 (하나라도 실패하면 전체 실패 - STRICT 정책)
+                    chunks_results: List[Tuple[ChunkInfo, Dict[str, Any]]] = []
+                    for chunk_info, chunk_path in chunks:
+                        try:
+                            result = self._parse_single_chunk(chunk_path, chunk_info)
+                            chunks_results.append((chunk_info, result))
+                        except Exception as e:
+                            logger.error(f"Chunk {chunk_info.chunk_index} failed: {e}")
+                            raise ValueError(
+                                f"Chunk {chunk_info.chunk_index + 1}/{chunk_info.total_chunks} "
+                                f"(pages {chunk_info.start_page}-{chunk_info.end_page - 1}) failed: {e}"
+                            )
 
-            page_count = getattr(docling_result.document, "pages", None)
-            page_count = len(page_count) if page_count else 1
+                    # 결과 병합 + 무결성 검증
+                    return self._merge_chunk_results(file_path, chunks_results)
 
-            # ImageExtractor 사용
-            image_extractor = ImageExtractor()
+                else:
+                    # 소형 PDF: 기존 방식 (단일 파싱)
+                    # GPU 메모리 정리
+                    if TORCH_AVAILABLE and torch.cuda.is_available():
+                        torch.cuda.empty_cache()
 
-            doc = {
-                "document": {
-                    "source_path": str(file_path),
-                    "format": "pdf",
-                    "encrypted": False,
-                    "parser": "docling",
-                    "text_extractor": "pypdfium2" if PYPDFIUM2_AVAILABLE else "docling",
-                    "page_count": page_count,
-                    "ocr_enabled": self.ocr_enabled,
-                    "table_extraction": self.table_extraction,
-                },
-                "content": {"paragraphs": paragraphs},
-                "tables": tables,
-                "assets": {
-                    "images": image_extractor.extract(docling_result),
-                },
-            }
+                    logger.debug(f"Starting docling conversion for {file_path.name}")
+                    docling_converter = self._get_converter()
+                    docling_result = docling_converter.convert(str(normalized_path))
+                    logger.debug(f"Docling conversion completed for {file_path.name}")
 
-            logger.info(
-                f"Parsed {file_path.name}: "
-                f"{len(paragraphs)} paragraphs, "
-                f"{len(tables)} tables, "
-                f"{page_count} pages"
-            )
+                    # 하이브리드: pypdfium2(텍스트) + Docling(구조)
+                    paragraphs = self._extract_paragraphs(normalized_path, docling_result)
 
-            return doc
+                    # TableExtractor 사용
+                    table_extractor = TableExtractor()
+                    tables = table_extractor.extract(docling_result, self.table_extraction)
+
+                    # Apply quality assessment
+                    for t in tables:
+                        attach_cell_reliability(t)
+                        attach_table_quality(t)
+
+                    # ImageExtractor 사용
+                    image_extractor = ImageExtractor()
+
+                    doc = {
+                        "document": {
+                            "source_path": str(file_path),
+                            "format": "pdf",
+                            "encrypted": False,
+                            "parser": "docling",
+                            "text_extractor": "pypdfium2" if PYPDFIUM2_AVAILABLE else "docling",
+                            "page_count": page_count,
+                            "ocr_enabled": self.ocr_enabled,
+                            "table_extraction": self.table_extraction,
+                            "chunked": False,
+                        },
+                        "content": {"paragraphs": paragraphs},
+                        "tables": tables,
+                        "assets": {
+                            "images": image_extractor.extract(docling_result),
+                        },
+                    }
+
+                    logger.info(
+                        f"Parsed {file_path.name}: "
+                        f"{len(paragraphs)} paragraphs, "
+                        f"{len(tables)} tables, "
+                        f"{page_count} pages"
+                    )
+
+                    return doc
+
+            finally:
+                # 임시 파일 정리
+                for temp_file in temp_files:
+                    try:
+                        if temp_file.exists():
+                            temp_file.unlink()
+                    except Exception:
+                        pass  # 정리 실패는 무시
 
         except ImportError:
             raise
         except Exception as e:
-            logger.error(f"Failed to parse PDF: {e}")
-            raise ValueError(f"PDF parsing failed: {e}")
+            # Enhanced error classification for better fallback handling
+            error_str = str(e).lower()
+            error_type = "unknown"
+
+            if "input document" in error_str and "not valid" in error_str:
+                error_type = "invalid_pdf"
+                logger.error(f"PDF validation error in pypdfium2/docling: {file_path.name} - {e}")
+            elif any(keyword in error_str for keyword in ["corrupt", "damaged", "invalid"]):
+                error_type = "corrupted_pdf"
+                logger.error(f"PDF corruption detected: {file_path.name} - {e}")
+            elif any(keyword in error_str for keyword in ["encrypted", "password", "permission"]):
+                error_type = "encrypted_pdf"
+                logger.error(f"PDF encryption issue: {file_path.name} - {e}")
+            elif any(keyword in error_str for keyword in ["memory", "out of memory", "oom"]):
+                error_type = "memory_error"
+                logger.error(f"Memory exhaustion during PDF parsing: {file_path.name} - {e}")
+            elif any(keyword in error_str for keyword in ["version", "unsupported format"]):
+                error_type = "unsupported_version"
+                logger.error(f"Unsupported PDF version/format: {file_path.name} - {e}")
+            elif any(keyword in error_str for keyword in ["timeout", "time"]):
+                error_type = "timeout"
+                logger.error(f"Parsing timeout: {file_path.name} - {e}")
+            else:
+                logger.error(f"Unexpected PDF parsing error: {file_path.name} - {e}")
+
+            # Re-raise with error type information
+            raise ValueError(f"PDF parsing failed ({error_type}): {e}") from e
         finally:
             # GPU memory cleanup for stability
             if TORCH_AVAILABLE and torch.cuda.is_available():

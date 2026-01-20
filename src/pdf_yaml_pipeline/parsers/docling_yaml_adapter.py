@@ -691,24 +691,52 @@ class DoclingYAMLAdapter:
             try:
                 # === Step 2: 페이지 수에 따라 분기 ===
                 if page_count > PAGE_THRESHOLD:
-                    # 대용량 PDF: 청크 분할 처리
-                    logger.info(f"Large PDF detected ({page_count} pages > {PAGE_THRESHOLD}), splitting into chunks")
+                    # 대용량 PDF: 스트리밍 청크 처리 (메모리 효율)
+                    logger.info(f"Large PDF detected ({page_count} pages > {PAGE_THRESHOLD}), streaming chunks")
 
-                    chunks = self._split_pdf(normalized_path, page_count)
-                    temp_files.extend([path for _, path in chunks])
-
-                    # 각 청크 파싱 (하나라도 실패하면 전체 실패 - STRICT 정책)
+                    total_chunks = (page_count + CHUNK_SIZE - 1) // CHUNK_SIZE
                     chunks_results: List[Tuple[ChunkInfo, Dict[str, Any]]] = []
-                    for chunk_info, chunk_path in chunks:
+
+                    # 청크 하나씩 생성→파싱→삭제 (스트리밍)
+                    for chunk_idx in range(total_chunks):
+                        start_page = chunk_idx * CHUNK_SIZE
+                        end_page = min(start_page + CHUNK_SIZE, page_count)
+
+                        chunk_info = ChunkInfo(
+                            chunk_index=chunk_idx,
+                            start_page=start_page,
+                            end_page=end_page,
+                            total_chunks=total_chunks,
+                            original_page_count=page_count,
+                        )
+
+                        # 청크 PDF 생성
+                        chunk_path = Path(tempfile.mktemp(suffix=f"_chunk{chunk_idx}.pdf"))
                         try:
+                            with pikepdf.open(normalized_path) as pdf:
+                                chunk_pdf = pikepdf.Pdf.new()
+                                chunk_pdf.pages.extend(pdf.pages[start_page:end_page])
+                                chunk_pdf.save(chunk_path)
+                                chunk_pdf.close()
+                            logger.debug(f"Created chunk {chunk_idx + 1}/{total_chunks}: pages {start_page}-{end_page - 1}")
+
+                            # 즉시 파싱
                             result = self._parse_single_chunk(chunk_path, chunk_info)
                             chunks_results.append((chunk_info, result))
+
                         except Exception as e:
                             logger.error(f"Chunk {chunk_info.chunk_index} failed: {e}")
                             raise ValueError(
                                 f"Chunk {chunk_info.chunk_index + 1}/{chunk_info.total_chunks} "
                                 f"(pages {chunk_info.start_page}-{chunk_info.end_page - 1}) failed: {e}"
                             )
+                        finally:
+                            # 청크 파일 즉시 삭제
+                            try:
+                                if chunk_path.exists():
+                                    chunk_path.unlink()
+                            except Exception:
+                                pass
 
                     # 결과 병합 + 무결성 검증
                     return self._merge_chunk_results(file_path, chunks_results)

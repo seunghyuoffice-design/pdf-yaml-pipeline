@@ -1,0 +1,42 @@
+# PDF-YAML Pipeline Dependencies (Lightweight)
+# 2026-01-22: docling 제거, PaddleOCR v5 중심
+
+# Core
+pyyaml==6.0.3
+pydantic==2.12.5
+loguru==0.7.3
+
+# Document Parsing
+python-docx==1.2.0
+
+# HWP Parsing (MIT License)
+olefile==0.47
+Pillow==11.3.0
+
+# Data Processing
+pandas==2.3.3
+numpy==2.4.1
+
+# Utilities
+tqdm==4.67.1
+python-magic==0.4.27
+charset-normalizer==3.4.0
+redis==7.1.0
+psutil==7.2.1
+httpx==0.28.1
+
+# PDF Processing Pipeline
+# 1. qpdf (청크/정규화) - 시스템 패키지
+# 2. pypdfium2 (파싱)
+# 3. PaddleOCR v5 (OCR)
+
+# PDF Parser
+pypdfium2==5.3.0  # BSD-3-Clause
+
+# PDF Repair/Extract
+pypdf==6.6.0  # Fallback
+
+# OCR (PaddlePaddle CUDA 12.6)
+# PaddlePaddle 3.2.0: pip install paddlepaddle-gpu==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
+paddleocr>=3.3.2  # PaddleOCR v5
+opencv-python==4.10.0.84

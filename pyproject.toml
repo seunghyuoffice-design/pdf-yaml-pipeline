@@ -1,0 +1,110 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pdf-yaml-pipeline"
+version = "1.0.0"
+description = "GPU-accelerated document processing: PDF/HWP → YAML for LLM training data"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "pdf-yaml-pipeline contributors" }
+]
+keywords = [
+    "pdf",
+    "hwp",
+    "yaml",
+    "document",
+    "parser",
+    "llm",
+    "training-data",
+    "paddleocr",
+    "korean",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: General",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+    "loguru>=0.7",
+    "Pillow>=10.0",
+    "tqdm>=4.60",
+]
+
+[project.optional-dependencies]
+pdf = [
+    "pypdfium2>=5.3.0",
+    "pypdf>=6.0",
+]
+ocr = [
+    "paddleocr>=3.3.2",
+    "opencv-python>=4.10.0",
+]
+hwp = [
+    "hwp2yaml>=0.6",
+    "olefile>=0.46",
+]
+gpu = [
+    "torch>=2.0",
+    "torchvision>=0.15",
+]
+queue = [
+    "redis>=5.0",
+]
+full = [
+    "pdf-yaml-pipeline[pdf,hwp,gpu,queue]",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/seunghyuoffice-design/pdf-yaml-pipeline"
+Documentation = "https://github.com/seunghyuoffice-design/pdf-yaml-pipeline#readme"
+Repository = "https://github.com/seunghyuoffice-design/pdf-yaml-pipeline.git"
+Issues = "https://github.com/seunghyuoffice-design/pdf-yaml-pipeline/issues"
+
+[project.scripts]
+pdf-yaml = "pdf_yaml_pipeline.cli:main"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src/pdf_yaml_pipeline",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pdf_yaml_pipeline"]
+sources = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

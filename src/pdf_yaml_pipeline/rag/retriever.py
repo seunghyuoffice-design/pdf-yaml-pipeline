@@ -6,6 +6,7 @@ FAISS 기반 벡터 검색 및 난이도 분류용 rag_peek 생성.
 
 from __future__ import annotations
 
+import builtins
 import json
 import os
 import pickle
@@ -25,6 +26,37 @@ DEFAULT_TOP_K = 3  # 보험 약관 RAG 최적값 (정확도 우선, 토큰 절�
 # =============================================================================
 # RAG Retriever
 # =============================================================================
+
+_ALLOWED_PICKLE_BUILTINS = {
+    "list",
+    "dict",
+    "set",
+    "tuple",
+    "str",
+    "int",
+    "float",
+    "bool",
+    "NoneType",
+}
+
+
+class _SafeUnpickler(pickle.Unpickler):
+    """Pickle을 기본 자료형으로 제한."""
+
+    def find_class(self, module: str, name: str) -> Any:
+        if module == "builtins" and name in _ALLOWED_PICKLE_BUILTINS:
+            return getattr(builtins, name)
+        raise pickle.UnpicklingError(f"Disallowed pickle type: {module}.{name}")
+
+
+def _load_legacy_metadata(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        raise FileNotFoundError(f"Legacy metadata not found: {path}")
+    with path.open("rb") as f:
+        data = _SafeUnpickler(f).load()
+    if not isinstance(data, list):
+        raise ValueError("index_metadata.pkl must be a list")
+    return data
 
 
 class RagRetriever:
@@ -61,7 +93,7 @@ class RagRetriever:
                 "Rebuild the index or set ALLOW_PICKLE_METADATA=true to allow legacy pickle."
             )
 
-        return pickle.load((index_dir / "index_metadata.pkl").open("rb"))
+        return _load_legacy_metadata(index_dir / "index_metadata.pkl")
 
     def search(self, query: str, k: int = DEFAULT_TOP_K) -> List[Dict[str, Any]]:
         """쿼리로 유사 청크 검색.

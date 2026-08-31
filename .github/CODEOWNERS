@@ -1,0 +1,19 @@
+# Public repository account owner and review-routing owner. CODEOWNERS does
+# not by itself prove copyright ownership, publication permission, security
+# acceptance, or release authority. Automated agents cannot be sole approvers.
+* @seunghyuoffice-design
+
+/AGENTS.md @seunghyuoffice-design
+/SECURITY.md @seunghyuoffice-design
+/PROVENANCE.md @seunghyuoffice-design
+/.github/CODEOWNERS @seunghyuoffice-design
+/.github/workflows/ @seunghyuoffice-design
+/Dockerfile @seunghyuoffice-design
+/docker-compose.yml @seunghyuoffice-design
+/pyproject.toml @seunghyuoffice-design
+/requirements.txt @seunghyuoffice-design
+/scripts/ @seunghyuoffice-design
+/src/pdf_yaml_pipeline/parsers/ @seunghyuoffice-design
+/src/pdf_yaml_pipeline/security/ @seunghyuoffice-design
+/src/pdf_yaml_pipeline/rag/ @seunghyuoffice-design
+/src/pdf_yaml_pipeline/notifications/ @seunghyuoffice-design
